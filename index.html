@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rooted – grow a tree while you focus</title>
+<meta name="description" content="A focus timer where a tree grows while you work. Unlock species, track streaks, and build a forest.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --mist: #E4EDE8; --card: #F3F7F4; --sky: #BFD9E3; --ink: #1F2D3A; --muted: #546472;
+    --leaf: #3F7D4B; --leaf-dark: #2F6B45; --bloom: #E8718D; --line: #C3D1CA;
+    --display: "Young Serif", Georgia, serif;
+    --ui: "Figtree", "Segoe UI", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--mist); color: var(--ink); font-family: var(--ui); line-height: 1.5; }
+  button, select, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--bloom); outline-offset: 3px; }
+  [hidden] { display: none !important; }
+  .wrap { max-width: 680px; margin: 0 auto; padding: 0 1.25rem; }
+
+  header { padding-top: 1.1rem; }
+  .bar { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+  .logo { font-family: var(--display); font-size: 1.6rem; margin: 0; }
+  .stats { color: var(--muted); font-size: .92rem; text-align: right; }
+  .tabs { display: flex; gap: .25rem; margin-top: .75rem; border-bottom: 2px solid var(--line); overflow-x: auto; }
+  .tab { background: none; border: 0; padding: .6rem 1rem; font-weight: 500; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -2px; white-space: nowrap; }
+  .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--leaf); font-weight: 700; }
+  main { padding-top: 1.25rem; padding-bottom: 3rem; }
+
+  .scene { border-radius: 20px; overflow: hidden; border: 2px solid var(--ink); }
+  .scene svg { display: block; width: 100%; height: auto; }
+
+  .panel { text-align: center; padding: 1.25rem 0 .5rem; }
+  .time { font-family: var(--display); font-size: clamp(3.5rem, 18vw, 5.5rem); line-height: 1; margin: 0; font-variant-numeric: tabular-nums; }
+  .msg { min-height: 3em; color: var(--muted); max-width: 46ch; margin: .6rem auto 1rem; }
+  .go { background: var(--leaf); color: #fff; border: 0; border-radius: 12px; padding: .9rem 2.4rem; font-weight: 700; font-size: 1.1rem; min-height: 52px; }
+  .go:hover { background: var(--leaf-dark); }
+  .go.quit { background: transparent; color: var(--ink); border: 2px solid var(--ink); }
+  .go.quit:hover { background: var(--ink); color: var(--mist); }
+
+  .setup { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 1rem 1.1rem; margin-top: 1.25rem; display: grid; gap: .9rem; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend { font-weight: 700; font-size: .92rem; padding: 0; margin-bottom: .4rem; }
+  .row { display: flex; flex-wrap: wrap; gap: .45rem; }
+  .chip { background: transparent; border: 2px solid var(--ink); border-radius: 999px; padding: .4rem .95rem; font-weight: 500; min-height: 42px; }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--mist); }
+  .chip:disabled { opacity: .45; cursor: not-allowed; }
+  .chip.locked { border-style: dashed; color: var(--muted); border-color: var(--muted); }
+  select { background: #fff; border: 2px solid var(--ink); border-radius: 10px; padding: .5rem .8rem; min-height: 42px; }
+  select:disabled { opacity: .5; }
+
+  h2 { font-family: var(--display); font-weight: 400; font-size: 1.5rem; margin: 0 0 .75rem; }
+  h3 { font-size: 1rem; margin: 1.75rem 0 .6rem; }
+  .muted { color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: .5rem; }
+  .cell { padding: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden; background: none; }
+  .cell[aria-pressed="true"] { border-color: var(--ink); }
+  .cell svg { display: block; width: 100%; height: auto; }
+  .detail { margin-top: 1rem; background: var(--card); border: 2px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .detail .meta { padding: .9rem 1.1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  .detail svg { display: block; width: 100%; height: auto; }
+  .link { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: .25rem; }
+  .btn { background: transparent; border: 2px solid var(--ink); border-radius: 10px; padding: .55rem 1.1rem; font-weight: 500; min-height: 42px; }
+  .btn:hover { background: var(--ink); color: var(--mist); }
+  .btn.danger { border-color: #A33A3A; color: #A33A3A; }
+  .btn.danger:hover { background: #A33A3A; color: #fff; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; }
+  .kpi { background: var(--card); border: 2px solid var(--line); border-radius: 14px; padding: .7rem .5rem; text-align: center; }
+  .kpi b { display: block; font-family: var(--display); font-weight: 400; font-size: 1.6rem; line-height: 1.1; }
+  .kpi span { font-size: .8rem; color: var(--muted); }
+  .chart { background: var(--card); border: 2px solid var(--line); border-radius: 14px; padding: .5rem; }
+  .chart svg { display: block; width: 100%; height: auto; }
+  .bars { display: grid; gap: .5rem; }
+  .bar-row { display: grid; grid-template-columns: 5.5rem 1fr 3.5rem; align-items: center; gap: .6rem; font-size: .92rem; }
+  .bar-track { background: var(--line); border-radius: 999px; height: .8rem; overflow: hidden; }
+  .bar-fill { background: var(--leaf); height: 100%; border-radius: 999px; }
+  .badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .5rem; padding: 0; margin: 0; list-style: none; }
+  .badge { border: 2px solid var(--line); border-radius: 12px; padding: .6rem .8rem; background: var(--card); }
+  .badge strong { display: block; }
+  .badge small { color: var(--muted); }
+  .badge.off { opacity: .55; border-style: dashed; }
+  .badge.on { border-color: var(--leaf); }
+
+  .set { display: grid; gap: 1.25rem; }
+  .set p { margin: 0 0 .5rem; }
+
+  .toast { position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); background: var(--ink); color: var(--mist); padding: .7rem 1.2rem; border-radius: 12px; max-width: min(92vw, 460px); z-index: 10; font-size: .95rem; }
+  noscript { display: block; padding: 1rem; text-align: center; }
+
+  @media (max-width: 520px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .bar-row { grid-template-columns: 4.5rem 1fr 3rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="bar">
+      <h1 class="logo">Rooted</h1>
+      <div class="stats" id="stats" aria-live="polite"></div>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Sections" id="tabs">
+      <button class="tab" role="tab" data-tab="focus" aria-selected="true">Focus</button>
+      <button class="tab" role="tab" data-tab="forest" aria-selected="false">Forest</button>
+      <button class="tab" role="tab" data-tab="stats" aria-selected="false">Stats</button>
+      <button class="tab" role="tab" data-tab="settings" aria-selected="false">Settings</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <noscript>Rooted needs JavaScript to run the timer.</noscript>
+
+  <!-- FOCUS -->
+  <section id="p-focus" role="tabpanel">
+    <div class="scene"><svg id="scene" viewBox="0 0 400 300" role="img" aria-label="A tree growing as your focus timer runs"></svg></div>
+    <div class="panel">
+      <p class="time" id="time" role="timer">25:00</p>
+      <p class="msg" id="msg" aria-live="polite"></p>
+      <button class="go" id="go">Plant a seed</button>
+    </div>
+    <div class="setup" id="setup">
+      <fieldset><legend>Tree</legend><div class="row" id="species"></div></fieldset>
+      <fieldset><legend>Length</legend>
+        <div class="row" id="lens">
+          <button class="chip" data-min="1">1 min (try it)</button>
+          <button class="chip" data-min="10">10 min</button>
+          <button class="chip" data-min="25">25 min</button>
+          <button class="chip" data-min="45">45 min</button>
+        </div>
+      </fieldset>
+      <fieldset><legend>Working on</legend>
+        <select id="tag" aria-label="What you are working on"></select>
+      </fieldset>
+      <fieldset><legend>Background sound</legend>
+        <div class="row" id="sounds">
+          <button class="chip" data-sound="off">Off</button>
+          <button class="chip" data-sound="rain">Rain</button>
+          <button class="chip" data-sound="wind">Wind</button>
+          <button class="chip" data-sound="hum">Low hum</button>
+        </div>
+      </fieldset>
+    </div>
+  </section>
+
+  <!-- FOREST -->
+  <section id="p-forest" role="tabpanel" hidden>
+    <h2>Your forest</h2>
+    <p class="muted" id="forest-empty">No trees yet. Finish a session to plant your first one.</p>
+    <div class="grid" id="grid"></div>
+    <div class="detail" id="detail" hidden></div>
+  </section>
+
+  <!-- STATS -->
+  <section id="p-stats" role="tabpanel" hidden>
+    <h2>Your progress</h2>
+    <div class="kpis" id="kpis"></div>
+    <h3>Last 7 days (minutes grown)</h3>
+    <div class="chart" id="chart"></div>
+    <h3>By activity</h3>
+    <div class="bars" id="tags"></div>
+    <h3>Achievements</h3>
+    <ul class="badges" id="badges"></ul>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="p-settings" role="tabpanel" hidden>
+    <h2>Settings</h2>
+    <div class="set">
+      <div>
+        <p><label for="grace"><strong>How long can you leave the tab?</strong></label></p>
+        <select id="grace">
+          <option value="5">5 seconds (strict)</option>
+          <option value="10">10 seconds</option>
+          <option value="30">30 seconds</option>
+          <option value="60">60 seconds (relaxed)</option>
+        </select>
+      </div>
+      <div>
+        <p><strong>Back up your forest</strong></p>
+        <p class="muted">Everything is stored in this browser. Export a file to move it to another device.</p>
+        <div class="row">
+          <button class="btn" id="export">Export backup</button>
+          <button class="btn" id="import">Import backup</button>
+          <input type="file" id="file" accept="application/json" hidden>
+        </div>
+      </div>
+      <div>
+        <p><strong>Start over</strong></p>
+        <button class="btn danger" id="reset">Delete all data</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function () {
+  'use strict';
+  var KEY = 'rooted:v2', OLD = 'rooted:forest', DEPTH = 7;
+
+  /* ---------- species ---------- */
+  var SPECIES = {
+    oak:    { name: 'Oak',    unlock: 0,   trunk: 52, dev: [12, 34], shrink: [.76, .82], split: .85, leafR: 8,
+              leaf: ['#3F7D4B', '#5FA05A', '#2F6B45'], bark: '#5A4636', bloom: '#E8718D' },
+    pine:   { name: 'Pine',   unlock: 30,  trunk: 44, dev: [6, 16],  shrink: [.80, .85], split: .70, leafR: 6,
+              leaf: ['#2D5A3D', '#24493A', '#3A6B48'], bark: '#4B3A2E', bloom: '#D9CFA8' },
+    cherry: { name: 'Cherry', unlock: 120, trunk: 50, dev: [18, 40], shrink: [.74, .80], split: .90, leafR: 8,
+              leaf: ['#F3B6C6', '#F6CBD7', '#E99AB1'], bark: '#5B4036', bloom: '#FFFFFF' },
+    maple:  { name: 'Maple',  unlock: 300, trunk: 50, dev: [14, 36], shrink: [.76, .82], split: .85, leafR: 8,
+              leaf: ['#D9622B', '#E8A33D', '#B9402A'], bark: '#54392B', bloom: '#F4C95D' }
+  };
+  var ORDER = ['oak', 'pine', 'cherry', 'maple'];
+  var TAGS = ['Study', 'Code', 'Read', 'Create', 'Other'];
+  var SKY = [[0, '#F5D5B8'], [.3, '#BFD9E3'], [.75, '#A9CBE0'], [1, '#F1B8A2']];
+
+  /* ---------- storage ---------- */
+  function defaults() { return { trees: [], ach: {}, set: { grace: 10, sound: 'off', species: 'oak', tag: 'Study', minutes: 25 } }; }
+  function normalize(d) {
+    var base = defaults();
+    if (!d || !Array.isArray(d.trees)) return base;
+    base.trees = d.trees.filter(function (t) { return t && typeof t.seed === 'number' && typeof t.min === 'number'; })
+      .map(function (t) { return { id: t.id || String(t.t) + t.seed, seed: t.seed, min: t.min, dead: !!t.dead, species: SPECIES[t.species] ? t.species : 'oak', tag: t.tag || 'Other', t: t.t || Date.now() }; });
+    base.ach = d.ach && typeof d.ach === 'object' ? d.ach : {};
+    base.set = Object.assign(base.set, d.set || {});
+    return base;
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) return normalize(JSON.parse(raw));
+      var old = JSON.parse(localStorage.getItem(OLD));
+      if (Array.isArray(old)) return normalize({ trees: old });
+    } catch (e) {}
+    return defaults();
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} }
+
+  var data = load();
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- tree drawing ---------- */
+  function rng(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function buildTree(seed, sp) {
+    var P = SPECIES[sp], r = rng(seed), segs = [];
+    (function grow(x, y, ang, len, d) {
+      var x2 = x + Math.cos(ang) * len, y2 = y + Math.sin(ang) * len;
+      segs.push({ x: x, y: y, x2: x2, y2: y2, d: d });
+      if (d >= DEPTH) return;
+      var n = d === 0 ? 1 : (r() < P.split ? 2 : 1);
+      for (var i = 0; i < n; i++) {
+        var side = n === 1 ? (r() < .5 ? -1 : 1) : (i === 0 ? -1 : 1);
+        var dev = (P.dev[0] + r() * (P.dev[1] - P.dev[0])) * Math.PI / 180 * side;
+        grow(x2, y2, ang + dev, len * (P.shrink[0] + r() * (P.shrink[1] - P.shrink[0])), d + 1);
+      }
+    })(200, 260, -Math.PI / 2, P.trunk, 0);
+    return segs;
+  }
+  function f1(n) { return n.toFixed(1); }
+  function clamp(v) { return Math.max(0, Math.min(1, v)); }
+  function hex(c) { return [1, 3, 5].map(function (i) { return parseInt(c.substr(i, 2), 16); }); }
+  function skyAt(p) {
+    for (var i = 1; i < SKY.length; i++) {
+      if (p <= SKY[i][0]) {
+        var a = SKY[i - 1], b = SKY[i], t = (p - a[0]) / (b[0] - a[0]), A = hex(a[1]), B = hex(b[1]);
+        return 'rgb(' + A.map(function (v, k) { return Math.round(v + (B[k] - v) * t); }).join(',') + ')';
+      }
+    }
+    return SKY[SKY.length - 1][1];
+  }
+  function treeMarkup(segs, sp, p, dead, bloom, ws) {
+    var P = SPECIES[sp], phases = DEPTH + 1, lines = '', leaves = '', blooms = '';
+    for (var i = 0; i < segs.length; i++) {
+      var s = segs[i], f = clamp(p * phases - s.d);
+      if (f <= 0) continue;
+      var ex = s.x + (s.x2 - s.x) * f, ey = s.y + (s.y2 - s.y) * f;
+      lines += '<line x1="' + f1(s.x) + '" y1="' + f1(s.y) + '" x2="' + f1(ex) + '" y2="' + f1(ey) + '" stroke-width="' + f1((1.2 + (DEPTH - s.d) * .95) * ws) + '"/>';
+      if (!dead && s.d >= DEPTH - 2) {
+        var base = s.d === DEPTH ? P.leafR : P.leafR * .62;
+        leaves += '<circle cx="' + f1(ex) + '" cy="' + f1(ey) + '" r="' + f1(base * f) + '" fill="' + P.leaf[i % 3] + '"/>';
+      }
+      if (bloom && s.d === DEPTH && i % 3 === 0) blooms += '<circle cx="' + f1(ex + 3) + '" cy="' + f1(ey - 3) + '" r="3.2" fill="' + P.bloom + '"/>';
+    }
+    return '<g stroke="' + (dead ? '#8A8178' : P.bark) + '" stroke-linecap="round">' + lines + '</g><g>' + leaves + '</g><g>' + blooms + '</g>';
+  }
+  function scene(segs, sp, treeP, skyP, mode, ws) {
+    var dead = mode === 'dead', sky = dead ? '#C9CDD1' : skyAt(skyP);
+    var sx = 50 + 300 * skyP, sy = 85 - Math.sin(Math.PI * skyP) * 45;
+    return '<rect width="400" height="300" fill="' + sky + '"/>' +
+      '<circle cx="' + f1(sx) + '" cy="' + f1(sy) + '" r="20" fill="' + (dead ? '#E3DFD3' : '#F4C95D') + '"/>' +
+      '<ellipse cx="200" cy="300" rx="260" ry="48" fill="' + (dead ? '#8FA38A' : '#6FAF5B') + '"/>' +
+      '<ellipse cx="200" cy="268" rx="46" ry="9" fill="#4A3A30"/>' +
+      treeMarkup(segs, sp, treeP, dead, mode === 'bloom', ws || 1);
+  }
+  function miniSVG(t, big) {
+    return '<svg viewBox="0 0 400 300" aria-hidden="true">' + scene(buildTree(t.seed, t.species), t.species, 1, .3, t.dead ? 'dead' : 'bloom', big ? 1 : 1.7) + '</svg>';
+  }
+
+  /* ---------- stats & achievements ---------- */
+  function dayKey(t) { var d = new Date(t); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function compute() {
+    var T = data.trees, s = { total: T.length, grown: 0, mins: 0, perDay: {}, perTag: {}, spGrown: {}, best: 0, comeback: false, week: [], today: 0, streak: 0, rate: 0 };
+    T.forEach(function (t, i) {
+      if (t.dead) return;
+      s.grown++; s.mins += t.min; s.best = Math.max(s.best, t.min);
+      s.perDay[dayKey(t.t)] = (s.perDay[dayKey(t.t)] || 0) + t.min;
+      s.perTag[t.tag] = (s.perTag[t.tag] || 0) + t.min;
+      s.spGrown[t.species] = true;
+      if (i > 0 && T[i - 1].dead) s.comeback = true;
+    });
+    var d = new Date(); s.today = s.perDay[dayKey(d)] || 0;
+    if (!s.today) d.setDate(d.getDate() - 1);
+    while (s.perDay[dayKey(d)]) { s.streak++; d.setDate(d.getDate() - 1); }
+    for (var i = 6; i >= 0; i--) {
+      var x = new Date(); x.setDate(x.getDate() - i);
+      s.week.push({ label: x.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 3), min: s.perDay[dayKey(x)] || 0, today: i === 0 });
+    }
+    s.rate = s.total ? Math.round(s.grown / s.total * 100) : 0;
+    return s;
+  }
+  var ACH = [
+    { id: 'first',  name: 'First seed',      desc: 'Grow your first tree',        ok: function (s) { return s.grown >= 1; } },
+    { id: 'grove',  name: 'Small grove',     desc: 'Grow 5 trees',                ok: function (s) { return s.grown >= 5; } },
+    { id: 'wood',   name: 'Woodland',        desc: 'Grow 25 trees',               ok: function (s) { return s.grown >= 25; } },
+    { id: 'long',   name: 'Long haul',       desc: 'Finish a 45 minute session',  ok: function (s) { return s.best >= 45; } },
+    { id: 'ten',    name: 'Ten hours',       desc: 'Focus for 600 minutes total', ok: function (s) { return s.mins >= 600; } },
+    { id: 's3',     name: 'Three in a row',  desc: 'Focus 3 days in a row',       ok: function (s) { return s.streak >= 3; } },
+    { id: 's7',     name: 'A full week',     desc: 'Focus 7 days in a row',       ok: function (s) { return s.streak >= 7; } },
+    { id: 'again',  name: 'Second try',      desc: 'Grow a tree after a withered one', ok: function (s) { return s.comeback; } },
+    { id: 'botany', name: 'Botanist',        desc: 'Grow every species',          ok: function (s) { return ORDER.every(function (k) { return s.spGrown[k]; }); } }
+  ];
+  function checkAch() {
+    var s = compute(), fresh = [];
+    ACH.forEach(function (a) { if (!data.ach[a.id] && a.ok(s)) { data.ach[a.id] = Date.now(); fresh.push(a.name); } });
+    return fresh;
+  }
+  function totalMin() { return compute().mins; }
+
+  /* ---------- toast ---------- */
+  var toastTimer;
+  function toast(msg) {
+    var el = $('toast'); el.textContent = msg; el.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.hidden = true; }, 4200);
+  }
+
+  /* ---------- sound (generated, no files) ---------- */
+  var ac = null, master = null, previewTimer;
+  function noiseBuffer(ctx, brown) {
+    var len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0), last = 0;
+    for (var i = 0; i < len; i++) {
+      var w = Math.random() * 2 - 1;
+      if (brown) { last = (last + .02 * w) / 1.02; d[i] = last * 3.5; } else d[i] = w;
+    }
+    return buf;
+  }
+  function stopSound() {
+    clearTimeout(previewTimer);
+    if (!ac) return;
+    var c = ac, m = master; ac = null; master = null;
+    try { m.gain.setTargetAtTime(0, c.currentTime, .15); setTimeout(function () { c.close(); }, 700); } catch (e) {}
+  }
+  function startSound(kind) {
+    stopSound();
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (kind === 'off' || !AC) return;
+    try {
+      ac = new AC(); master = ac.createGain(); master.gain.value = 0; master.connect(ac.destination);
+      var src = ac.createBufferSource(); src.buffer = noiseBuffer(ac, kind === 'hum'); src.loop = true;
+      var f = ac.createBiquadFilter(), g = ac.createGain();
+      if (kind === 'rain') {
+        f.type = 'highpass'; f.frequency.value = 900; g.gain.value = .22;
+        var lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 9000;
+        src.connect(f); f.connect(lp); lp.connect(g);
+      } else if (kind === 'wind') {
+        f.type = 'lowpass'; f.frequency.value = 500; f.Q.value = 2; g.gain.value = .5;
+        var lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = .12; lg.gain.value = .25;
+        lfo.connect(lg); lg.connect(g.gain); lfo.start(); src.connect(f); f.connect(g);
+      } else {
+        f.type = 'lowpass'; f.frequency.value = 300; g.gain.value = .6; src.connect(f); f.connect(g);
+      }
+      g.connect(master); src.start(); master.gain.setTargetAtTime(.8, ac.currentTime, .5);
+    } catch (e) { ac = null; }
+  }
+
+  /* ---------- focus session ---------- */
+  var state = 'idle', seed = 1, segs = [], endAt = 0, total = 0, awayAt = 0, timer = null, selected = null;
+  var set = data.set;
+  if ([1, 10, 25, 45].indexOf(+set.minutes) < 0) set.minutes = 25;
+  if (!SPECIES[set.species] || totalMin() < SPECIES[set.species].unlock) set.species = 'oak';
+
+  function fmt(ms) {
+    var s = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(s / 60);
+    return (m < 10 ? '0' : '') + m + ':' + (s % 60 < 10 ? '0' : '') + (s % 60);
+  }
+  function setStatsLine() {
+    var s = compute(), h = Math.floor(s.mins / 60), m = s.mins % 60;
+    $('stats').textContent = s.grown + (s.grown === 1 ? ' tree' : ' trees') + ' · ' + (h ? h + 'h ' : '') + m + 'm' + (s.streak ? ' · ' + s.streak + '-day streak' : '');
+  }
+  function renderSetup() {
+    var running = state === 'running', tot = totalMin();
+    $('species').innerHTML = ORDER.map(function (id) {
+      var sp = SPECIES[id], locked = tot < sp.unlock;
+      return '<button class="chip' + (locked ? ' locked' : '') + '" data-sp="' + id + '" aria-pressed="' + (set.species === id) + '"' +
+        (locked ? ' aria-disabled="true"' : '') + (running ? ' disabled' : '') + '>' + sp.name + (locked ? ' (' + sp.unlock + ' min)' : '') + '</button>';
+    }).join('');
+    Array.prototype.forEach.call($('lens').children, function (b) { b.setAttribute('aria-pressed', String(+b.dataset.min === +set.minutes)); b.disabled = running; });
+    Array.prototype.forEach.call($('sounds').children, function (b) { b.setAttribute('aria-pressed', String(b.dataset.sound === set.sound)); });
+    $('tag').value = set.tag; $('tag').disabled = running;
+  }
+  function paintIdle() {
+    $('time').textContent = fmt(set.minutes * 60000);
+    $('scene').innerHTML = scene(segs, set.species, .03, .3, '');
+  }
+  function newSeed() { seed = Math.floor(Math.random() * 1e9); segs = buildTree(seed, set.species); }
+  function idle() {
+    state = 'idle'; clearInterval(timer); stopSound(); newSeed(); paintIdle();
+    $('msg').textContent = 'Pick a tree and a length, then plant a seed. Stay on this tab until it has grown.';
+    $('go').textContent = 'Plant a seed'; $('go').className = 'go';
+    document.title = 'Rooted – grow a tree while you focus'; renderSetup();
+  }
+  function paintRun() {
+    var left = endAt - Date.now(), p = clamp(1 - left / total);
+    $('time').textContent = fmt(left); document.title = fmt(left) + ' – Rooted';
+    $('scene').innerHTML = scene(segs, set.species, Math.max(p, .03), p, '');
+  }
+  function start() {
+    state = 'running'; total = set.minutes * 60000; endAt = Date.now() + total; awayAt = 0;
+    $('msg').textContent = 'Growing. Leaving this tab for more than ' + set.grace + ' seconds will wither the tree.';
+    $('go').textContent = 'Give up'; $('go').className = 'go quit';
+    renderSetup(); startSound(set.sound);
+    clearInterval(timer); timer = setInterval(tick, 250); paintRun();
+  }
+  function tick() { if (state !== 'running') return; if (Date.now() >= endAt) finish(); else paintRun(); }
+  function record(dead) {
+    var before = totalMin();
+    data.trees.push({ id: Date.now() + '-' + seed, seed: seed, min: set.minutes, dead: dead, species: set.species, tag: set.tag, t: Date.now() });
+    if (data.trees.length > 300) data.trees = data.trees.slice(-300);
+    var notes = checkAch().map(function (n) { return 'Achievement: ' + n + '.'; });
+    ORDER.forEach(function (id) { var u = SPECIES[id].unlock; if (before < u && totalMin() >= u) notes.push(SPECIES[id].name + ' unlocked.'); });
+    save(); setStatsLine(); renderAll();
+    if (notes.length) toast(notes.join(' '));
+  }
+  function finish() {
+    state = 'done'; clearInterval(timer); stopSound();
+    $('time').textContent = '00:00';
+    $('scene').innerHTML = scene(segs, set.species, 1, 1, 'bloom');
+    $('msg').textContent = 'Fully grown. ' + set.minutes + (set.minutes === 1 ? ' minute of ' : ' minutes of ') + set.tag.toLowerCase() + ' added to your forest.';
+    $('go').textContent = 'Plant another'; $('go').className = 'go';
+    document.title = 'Done – Rooted'; record(false); renderSetup();
+  }
+  function wither(reason) {
+    state = 'dead'; clearInterval(timer); stopSound();
+    var p = clamp(1 - (endAt - Date.now()) / total);
+    $('scene').innerHTML = scene(segs, set.species, Math.max(p, .03), p, 'dead');
+    $('msg').textContent = reason + ' Plant another when you are ready.';
+    $('go').textContent = 'Plant another'; $('go').className = 'go';
+    document.title = 'Withered – Rooted'; record(true); renderSetup();
+  }
+
+  /* ---------- tabs & panels ---------- */
+  function renderForest() {
+    var T = data.trees.slice().reverse().slice(0, 60);
+    $('forest-empty').hidden = data.trees.length > 0;
+    $('grid').innerHTML = T.map(function (t) {
+      var label = SPECIES[t.species].name + ', ' + (t.dead ? 'withered' : t.min + ' minutes');
+      return '<button class="cell" data-id="' + t.id + '" aria-label="' + label + '" aria-pressed="' + (selected === t.id) + '">' + miniSVG(t) + '</button>';
+    }).join('');
+    var t = data.trees.filter(function (x) { return x.id === selected; })[0], det = $('detail');
+    if (!t) { det.hidden = true; return; }
+    det.hidden = false;
+    det.innerHTML = miniSVG(t, true) + '<div class="meta"><div><strong>' + SPECIES[t.species].name + (t.dead ? ' (withered)' : '') + '</strong><br><span class="muted">' +
+      t.min + ' min · ' + t.tag + ' · ' + new Date(t.t).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) +
+      '</span></div><button class="btn" id="remove">Remove</button></div>';
+  }
+  function renderStats() {
+    var s = compute();
+    $('kpis').innerHTML = [[s.today + 'm', 'Today'], [s.streak, 'Day streak'], [s.grown, 'Trees grown'], [s.rate + '%', 'Finish rate']]
+      .map(function (k) { return '<div class="kpi"><b>' + k[0] + '</b><span>' + k[1] + '</span></div>'; }).join('');
+    var max = Math.max(30, Math.max.apply(null, s.week.map(function (w) { return w.min; }))), bars = '';
+    s.week.forEach(function (w, i) {
+      var h = Math.round(w.min / max * 80), x = 22 + i * 40;
+      bars += '<rect x="' + x + '" y="' + (100 - h) + '" width="30" height="' + Math.max(h, 2) + '" rx="4" fill="' + (w.today ? '#1F2D3A' : '#3F7D4B') + '"/>' +
+        '<text x="' + (x + 15) + '" y="' + (94 - h) + '" text-anchor="middle" font-size="10" fill="#546472">' + (w.min || '') + '</text>' +
+        '<text x="' + (x + 15) + '" y="116" text-anchor="middle" font-size="10" fill="#546472">' + w.label + '</text>';
+    });
+    $('chart').innerHTML = '<svg viewBox="0 0 320 124" role="img" aria-label="Minutes grown per day for the last 7 days">' + bars + '</svg>';
+    var tags = Object.keys(s.perTag).sort(function (a, b) { return s.perTag[b] - s.perTag[a]; }), top = s.perTag[tags[0]] || 1;
+    $('tags').innerHTML = tags.length ? tags.map(function (k) {
+      return '<div class="bar-row"><span>' + k + '</span><div class="bar-track"><div class="bar-fill" style="width:' + Math.round(s.perTag[k] / top * 100) + '%"></div></div><span>' + s.perTag[k] + 'm</span></div>';
+    }).join('') : '<p class="muted">Finish a session to see where your time goes.</p>';
+    $('badges').innerHTML = ACH.map(function (a) {
+      var on = !!data.ach[a.id];
+      return '<li class="badge ' + (on ? 'on' : 'off') + '"><strong>' + a.name + '</strong><small>' + a.desc + (on ? ' · done' : '') + '</small></li>';
+    }).join('');
+  }
+  function renderAll() { renderForest(); renderStats(); $('grace').value = String(set.grace); }
+  function showTab(name) {
+    Array.prototype.forEach.call($('tabs').children, function (b) { b.setAttribute('aria-selected', String(b.dataset.tab === name)); });
+    ['focus', 'forest', 'stats', 'settings'].forEach(function (n) { $('p-' + n).hidden = n !== name; });
+    if (name === 'forest') renderForest(); if (name === 'stats') renderStats();
+  }
+
+  /* ---------- events ---------- */
+  $('tabs').addEventListener('click', function (e) { var b = e.target.closest('.tab'); if (b) showTab(b.dataset.tab); });
+
+  $('go').addEventListener('click', function () {
+    if (state === 'idle') start();
+    else if (state === 'running') wither('You gave up on this one.');
+    else idle();
+  });
+
+  $('setup').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip'); if (!b || b.disabled) return;
+    if (b.dataset.min) { set.minutes = +b.dataset.min; if (state === 'idle') paintIdle(); }
+    else if (b.dataset.sp) {
+      var sp = SPECIES[b.dataset.sp], have = totalMin();
+      if (have < sp.unlock) { toast('Grow ' + (sp.unlock - have) + ' more minutes of trees to unlock ' + sp.name + '.'); return; }
+      set.species = b.dataset.sp;
+      if (state === 'idle') { segs = buildTree(seed, set.species); paintIdle(); }
+    } else if (b.dataset.sound) {
+      set.sound = b.dataset.sound;
+      if (state === 'running') startSound(set.sound);
+      else { startSound(set.sound); previewTimer = setTimeout(stopSound, 3000); }
+    }
+    save(); renderSetup();
+  });
+  $('tag').addEventListener('change', function () { set.tag = this.value; save(); });
+
+  $('grid').addEventListener('click', function (e) {
+    var b = e.target.closest('.cell'); if (!b) return;
+    selected = selected === b.dataset.id ? null : b.dataset.id; renderForest();
+  });
+  $('detail').addEventListener('click', function (e) {
+    if (!e.target.closest('#remove')) return;
+    data.trees = data.trees.filter(function (t) { return t.id !== selected; }); selected = null;
+    save(); setStatsLine(); renderAll(); renderSetup();
+  });
+
+  document.addEventListener('visibilitychange', function () {
+    if (state !== 'running') return;
+    if (document.hidden) awayAt = Date.now();
+    else if (awayAt && Date.now() - awayAt > set.grace * 1000) wither('You left the tab for ' + Math.round((Date.now() - awayAt) / 1000) + ' seconds.');
+    else awayAt = 0;
+  });
+
+  $('grace').addEventListener('change', function () { set.grace = +this.value; save(); });
+  $('export').addEventListener('click', function () {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    a.download = 'rooted-backup.json'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  });
+  $('import').addEventListener('click', function () { $('file').click(); });
+  $('file').addEventListener('change', function () {
+    var f = this.files && this.files[0]; if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      try {
+        var d = JSON.parse(r.result);
+        if (!d || !Array.isArray(d.trees)) throw new Error('bad');
+        data = normalize(d); set = data.set; save(); setStatsLine(); renderAll(); idle(); toast('Backup imported: ' + data.trees.length + ' trees.');
+      } catch (err) { toast('That file is not a Rooted backup.'); }
+    };
+    r.readAsText(f); this.value = '';
+  });
+  $('reset').addEventListener('click', function () {
+    if (!confirm('Delete every tree, stat and achievement? This cannot be undone.')) return;
+    data = defaults(); set = data.set; selected = null; save(); setStatsLine(); renderAll(); idle(); toast('All data deleted.');
+  });
+
+  /* ---------- init ---------- */
+  $('tag').innerHTML = TAGS.map(function (t) { return '<option>' + t + '</option>'; }).join('');
+  setStatsLine(); renderAll(); idle();
+})();
+</script>
+</body>
+</html>
